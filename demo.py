@@ -32,8 +32,39 @@ def correctWhiteBalance(img, area):
 
     # cv2.imwrite(f"{name}_wb.jpg", wb)
 
-    img = wb.astype(np.uint8)
-    return img
+    # Convert data and sample to YCbCr
+    ycbcr = rgb2ycbcr(img)
+    ysub = rgb2ycbcr(np.array([pixels]))
+
+    yc = list(np.mean(ysub[:, :, i]) for i in range(3))
+
+    for i in range(1, 3):
+        ycbcr[:, :, i] = np.clip(ycbcr[:, :, i] + (128 - yc[i]), 0, 255)
+
+    rgb = ycbcr2rgb(ycbcr)
+    return rgb
+
+    # img = wb.astype(np.uint8)
+
+
+# Conversion functions courtesy of https://stackoverflow.com/a/34913974/2721685
+def rgb2ycbcr(im):
+    xform = np.array(
+        [[0.299, 0.587, 0.114], [-0.1687, -0.3313, 0.5], [0.5, -0.4187, -0.0813]]
+    )
+    ycbcr = im.dot(xform.T)
+    ycbcr[:, :, [1, 2]] += 128
+    return ycbcr  # np.uint8(ycbcr)
+
+
+def ycbcr2rgb(im):
+    xform = np.array([[1, 0, 1.402], [1, -0.34414, -0.71414], [1, 1.772, 0]])
+    rgb = im.astype(np.float)
+    rgb[:, :, [1, 2]] -= 128
+    rgb = rgb.dot(xform.T)
+    np.putmask(rgb, rgb > 255, 255)
+    np.putmask(rgb, rgb < 0, 0)
+    return np.uint8(rgb)
 
 
 def writeText(img, text):
