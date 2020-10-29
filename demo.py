@@ -4,7 +4,32 @@ from math import sqrt
 import sys
 
 
+def getChessboardCorners(gray, rows, columns):
+    ret, corners = cv2.findChessboardCorners(gray, (rows, columns), None)
+    if ret:
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+        return corners
+
+
+def getChessboardAreaPoly(corners, rows, columns):
+    length = rows * columns
+    return [
+        corners[0][0],
+        corners[rows - 1][0],
+        corners[length - 1][0],
+        corners[length - rows][0],
+    ]
+
+
 def correctWhiteBalance(img, area):
+    pixels = getReferenceAreaPixels(img, area)
+
+    # return wb_rgb(img, pixels)
+    return wb_ycbr(img, pixels)
+
+
+def getReferenceAreaPixels(img, area):
     # make a binary mask from the reference area
     mask = np.full(img.shape[:2], 0, dtype=np.uint8)
     cv2.fillPoly(
@@ -17,12 +42,14 @@ def correctWhiteBalance(img, area):
     # cv2.imwrite(f"{name}_part.jpg", imCopy)
 
     # get all the area's pixels
-    height, width, _ = img.shape
-    pixels = np.array(
+    height, width = img.shape[:2]
+    return np.array(
         [img[y][x] for x in range(width) for y in range(height) if mask[y][x]]
     )
 
-    # https://codeandlife.com/2019/08/17/correcting-image-white-balance-with-python-pil-and-numpy/
+
+# https://codeandlife.com/2019/08/17/correcting-image-white-balance-with-python-pil-and-numpy/
+def wb_rgb(img, pixels):
     c = list(np.mean(pixels[:, i]) for i in range(3))
     minc = float(min(c))
 
@@ -31,7 +58,10 @@ def correctWhiteBalance(img, area):
         wb[:, :, i] /= c[i] / minc
 
     # cv2.imwrite(f"{name}_wb.jpg", wb)
+    return wb.astype(np.uint8)
 
+
+def wb_ycbr(img, pixels):
     # Convert data and sample to YCbCr
     ycbcr = rgb2ycbcr(img)
     ysub = rgb2ycbcr(np.array([pixels]))
@@ -43,8 +73,6 @@ def correctWhiteBalance(img, area):
 
     rgb = ycbcr2rgb(ycbcr)
     return rgb
-
-    # img = wb.astype(np.uint8)
 
 
 # Conversion functions courtesy of https://stackoverflow.com/a/34913974/2721685
@@ -72,7 +100,9 @@ def writeText(img, text):
 
 
 def measure(img, area):
+    x0, y0 = area[0]
     x1, y1 = area[1]
+    x2, y2 = area[2]
     x3, y3 = area[3]
 
     catX = x3 - x1
@@ -80,24 +110,23 @@ def measure(img, area):
     hypoPix = sqrt(catX ** 2 + catY ** 2)
     pxRatio = hypoPix / 200  # pixels/mm
 
-    height, width, _ = img.shape
+    height, width = img.shape[:2]
     return int(width / pxRatio), int(height / pxRatio)
 
 
 name = sys.argv[1]
-
 filename = f"{name}.jpg"
 img = cv2.imread(filename)
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-ret, corners = cv2.findChessboardCorners(gray, (3, 9), None)
-
-area = [corners[0][0], corners[2][0], corners[26][0], corners[24][0]]
-
-img = correctWhiteBalance(img, area)
-
-size = measure(img, area)
-width, height = size
-writeText(img, f"FOV {width} x {height} mm")
-
-cv2.imwrite(f"{name}_1.jpg", img)
+if img is not None:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    rows, columns = 3, 9
+    corners = getChessboardCorners(gray, rows, columns)
+    if corners is not None:
+        area = getChessboardAreaPoly(corners, rows, columns)
+        img = correctWhiteBalance(img, area)
+        size = measure(img, area)
+        width, height = size
+        writeText(img, f"FOV {width} x {height} mm")
+        cv2.drawChessboardCorners(img, (rows, columns), corners, True)
+        cv2.imwrite(f"{name}_1.jpg", img)
