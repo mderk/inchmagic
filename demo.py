@@ -128,5 +128,5 @@ if img is not None:
         size = measure(img, area)
         width, height = size
         writeText(img, f"FOV {width} x {height} mm")
-        cv2.drawChessboardCorners(img, (rows, columns), corners, True)
+        # cv2.drawChessboardCorners(img, (rows, columns), corners, True)
         cv2.imwrite(f"{name}_1.jpg", img)
